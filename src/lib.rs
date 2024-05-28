@@ -1,3 +1,8 @@
+//! Modified version of [`unicode-linebreak`] with support for analyzing text
+//! split across multiple non-contiguous chunks.
+//!
+//! This is quite an advanced use case: **You probably want to use [`unicode-linebreak`] instead.**
+//!
 //! Implementation of the Line Breaking Algorithm described in [Unicode Standard Annex #14][UAX14].
 //!
 //! Given an input text, locates "line break opportunities", or positions appropriate for wrapping
@@ -6,28 +11,32 @@
 //! # Example
 //!
 //! ```
-//! use unicode_linebreak::{linebreaks, BreakOpportunity::{Mandatory, Allowed}};
+//! use unicode_linebreak_chunked::{Linebreaks, BreakOpportunity::{Mandatory, Allowed}};
 //!
-//! let text = "a b \nc";
-//! assert!(linebreaks(text).eq([
-//!     (2, Allowed),   // May break after first space
-//!     (5, Mandatory), // Must break after line feed
-//!     (6, Mandatory)  // Must break at end of text, so that there always is at least one LB
-//! ]));
+//! let mut l = Linebreaks::default();
+//! assert!(l.chunk("a ").eq([]));
+//! assert!(l.chunk("b ").eq([(0, Allowed)]));     // May break after first space
+//! assert!(l.chunk("\nc").eq([(1, Mandatory)]));  // Must break after line feed
+//! assert!(l.chunk("d e").eq([(2, Allowed)]));    // May break after space, no break between chunks
+//! assert_eq!(l.eot(), Some(Mandatory));          // Must break at end of text, so that there always is at least one LB
 //! ```
 //!
 //! [UAX14]: https://www.unicode.org/reports/tr14/
+//!
+//! [`unicode-linebreak`]: https://docs.rs/unicode-linebreak
 
 #![no_std]
 #![deny(missing_docs, missing_debug_implementations)]
 
 use core::iter::once;
+use iter_utils::ExhaustOnDrop;
 
 /// The [Unicode version](https://www.unicode.org/versions/) conformed to.
 pub const UNICODE_VERSION: (u8, u8, u8) = (15, 0, 0);
 
 include!("shared.rs");
 include!("tables.rs");
+mod iter_utils;
 
 /// Returns the line break property of the specified code point.
 ///
@@ -69,6 +78,71 @@ pub enum BreakOpportunity {
     Mandatory,
     /// A line is allowed to end at this spot.
     Allowed,
+}
+
+/// Returns iterators over line break opportunities in some text
+/// that is possibly split across multiple non-contiguous chunks.
+///
+/// Uses the default Line Breaking Algorithm with the tailoring that Complex-Context Dependent
+/// (SA) characters get resolved to Ordinary Alphabetic and Symbol Characters (AL) regardless of
+/// General_Category.
+///
+/// The input is provided as chunks using the [`Linebreaks::chunk`] method. \
+/// Be sure to call [`Linebreaks::eot`] after providing all text.
+#[derive(Clone, Debug)]
+pub struct Linebreaks(u8, bool);
+
+impl Default for Linebreaks {
+    fn default() -> Self {
+        Self(sot, false)
+    }
+}
+
+impl Linebreaks {
+    /// Get the break opportunities for the next chunk of text.
+    ///
+    /// Break opportunities are given as tuples of the byte index (relative to the current chunk)
+    /// of the character succeeding the break and the type.
+    ///
+    /// Note that this will not return a [`BreakOpportunity`] at the end
+    /// of the provided chunk. Call [`Linebreaks::eot`] after providing all chunks to
+    /// get the final [`BreakOpportunity`].
+    pub fn chunk<'a>(
+        &'a mut self,
+        s: &'a str,
+    ) -> impl Iterator<Item = (usize, BreakOpportunity)> + 'a {
+        ExhaustOnDrop(
+            s.char_indices()
+                .map(|(i, c)| (i, break_property(c as u32) as u8))
+                .filter_map(|(i, cls)| self.next(cls).map(|o| (i, o))),
+        )
+    }
+
+    /// End of text. This resets the [`Linebreaks`] struct for re-use.
+    pub fn eot(&mut self) -> Option<BreakOpportunity> {
+        let opportunity = self.next(eot);
+        *self = Self::default();
+        opportunity
+    }
+
+    fn next(&mut self, cls: u8) -> Option<BreakOpportunity> {
+        use BreakOpportunity::{Allowed, Mandatory};
+
+        // ZWJ is handled outside the table to reduce its size
+        let val = PAIR_TABLE[self.0 as usize][cls as usize];
+        let is_mandatory = val & MANDATORY_BREAK_BIT != 0;
+        let is_break = val & ALLOWED_BREAK_BIT != 0 && (!self.1 || is_mandatory);
+        *self = Linebreaks(
+            val & !(ALLOWED_BREAK_BIT | MANDATORY_BREAK_BIT),
+            cls == BreakClass::ZeroWidthJoiner as u8,
+        );
+
+        if is_break {
+            Some(if is_mandatory { Mandatory } else { Allowed })
+        } else {
+            None
+        }
+    }
 }
 
 /// Returns an iterator over line break opportunities in the specified string.
@@ -145,6 +219,10 @@ pub fn split_at_safe(s: &str) -> (&str, &str) {
     // Include preceding char for `linebreaks` to pick up break before match (disallowed after sot)
     s.split_at(chars.next().map_or(0, |(i, _)| i))
 }
+
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+pub mod readme_doctests {}
 
 #[cfg(test)]
 mod tests {

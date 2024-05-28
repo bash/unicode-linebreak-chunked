@@ -1,10 +1,9 @@
 [package]
-name = "unicode-linebreak"
+name = "unicode-linebreak-chunked"
 version = "0.1.5"
-authors = ["Axel Forsman <axelsfor@gmail.com>"]
+authors = ["Tau Gärtli"]
 description = "Implementation of the Unicode Line Breaking Algorithm"
-homepage = "https://github.com/axelf4/unicode-linebreak"
-repository = "https://github.com/axelf4/unicode-linebreak"
+repository = "https://github.com/bash/unicode-linebreak-chunked"
 readme = "README.md"
 keywords = ["unicode", "text", "layout"]
 categories = ["internationalization"]

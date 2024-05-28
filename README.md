@@ -1,9 +1,11 @@
 # unicode-linebreak
 
-Implementation of the Line Breaking Algorithm described in [Unicode Standard Annex #14][UAX14].
+Modified version of [`unicode-linebreak`] with support for analyzing text
+split across multiple non-contiguous chunks.
 
-![test](https://github.com/axelf4/unicode-linebreak/workflows/test/badge.svg)
-[![Documentation](https://docs.rs/unicode-linebreak/badge.svg)](https://docs.rs/unicode-linebreak)
+This is quite an advanced use case: **You probably want to use [`unicode-linebreak`] instead.**
+
+[![Documentation](https://docs.rs/unicode-linebreak-chunked/badge.svg)](https://docs.rs/unicode-linebreak-chunked)
 
 Given an input text, locates "line break opportunities", or positions appropriate for wrapping
 lines when displaying text.
@@ -11,14 +13,14 @@ lines when displaying text.
 ## Example
 
 ```rust
-use unicode_linebreak::{linebreaks, BreakOpportunity::{Mandatory, Allowed}};
+use unicode_linebreak_chunked::{Linebreaks, BreakOpportunity::{Mandatory, Allowed}};
 
-let text = "a b \nc";
-assert!(linebreaks(text).eq([
-	(2, Allowed),   // May break after first space
-	(5, Mandatory), // Must break after line feed
-	(6, Mandatory)  // Must break at end of text, so that there always is at least one LB
-]));
+let mut l = Linebreaks::default();
+assert!(l.chunk("a ").eq([]));
+assert!(l.chunk("b ").eq([(0, Allowed)]));     // May break after first space
+assert!(l.chunk("\nc").eq([(1, Mandatory)]));  // Must break after line feed
+assert!(l.chunk("d e").eq([(2, Allowed)]));    // May break after space, no break between chunks
+assert_eq!(l.eot(), Some(Mandatory));          // Must break at end of text, so that there always is at least one LB
 ```
 
 ## Development
@@ -34,3 +36,4 @@ cargo test
 ```
 
 [UAX14]: https://www.unicode.org/reports/tr14/
+[`unicode-linebreak`]: https://github.com/axelf4/unicode-linebreak

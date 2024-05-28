@@ -3,14 +3,32 @@ name: test
 on: [push, pull_request]
 
 jobs:
-  test:
+  pre-build:
+    name: Pre-Build
     runs-on: ubuntu-latest
+    outputs:
+      rust-version: ${{ steps.rust-version.outputs.rust-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine Rust Version
+        id: rust-version
+        run: |
+          rust_version=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "unicode-linebreak-chunked") | .rust_version')
+          echo "rust-version=$rust_version" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: pre-build
+    name: ${{ format('Build ({0})', matrix.rust-version) }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust-version: ['${{needs.pre-build.outputs.rust-version}}', stable]
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ matrix.rust-version }}
           profile: minimal
           override: true
 

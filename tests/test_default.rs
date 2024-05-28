@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 use std::iter::from_fn;
 use std::u32;
-use unicode_linebreak::*;
+use unicode_linebreak_chunked::*;
 
 const TEST_FILE: &str = "tests/LineBreakTest.txt";
 
@@ -48,7 +48,7 @@ fn test_lb_default() -> io::Result<()> {
         })
         .unzip();
 
-        let actual: Vec<_> = linebreaks(&string).map(|(i, _)| i).collect();
+        let actual: Vec<_> = linebreak_indices(&string);
         let expected: Vec<_> = spots
             .into_iter()
             .filter_map(|(i, is_break)| if is_break { Some(i) } else { None })
@@ -62,4 +62,11 @@ fn test_lb_default() -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn linebreak_indices(s: &str) -> Vec<usize> {
+    let mut l = Linebreaks::default();
+    let mut breaks: Vec<_> = l.chunk(s).map(|(i, _)| i).collect();
+    breaks.extend(l.eot().map(|_| s.len()));
+    breaks
 }
