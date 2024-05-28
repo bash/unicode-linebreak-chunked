@@ -43,7 +43,7 @@ mod iter_utils;
 /// # Examples
 ///
 /// ```
-/// use unicode_linebreak::{BreakClass, break_property};
+/// use unicode_linebreak_chunked::{BreakClass, break_property};
 /// assert_eq!(break_property(0x2CF3), BreakClass::Alphabetic);
 /// ```
 #[inline(always)]
@@ -157,7 +157,7 @@ impl Linebreaks {
 /// # Examples
 ///
 /// ```
-/// use unicode_linebreak::{linebreaks, BreakOpportunity::{Mandatory, Allowed}};
+/// use unicode_linebreak_chunked::{linebreaks, BreakOpportunity::{Mandatory, Allowed}};
 /// assert!(linebreaks("Hello world!").eq(vec![(6, Allowed), (12, Mandatory)]));
 /// ```
 pub fn linebreaks(s: &str) -> impl Iterator<Item = (usize, BreakOpportunity)> + Clone + '_ {
@@ -201,7 +201,7 @@ pub fn linebreaks(s: &str) -> impl Iterator<Item = (usize, BreakOpportunity)> + 
 /// # Examples
 ///
 /// ```
-/// use unicode_linebreak::{linebreaks, split_at_safe};
+/// use unicode_linebreak_chunked::{linebreaks, split_at_safe};
 /// let s = "Not allowed to break within em dashes: — —";
 /// let (prev, safe) = split_at_safe(s);
 /// let n = prev.len();
