@@ -1,6 +1,6 @@
 [package]
 name = "unicode-linebreak-chunked"
-version = "0.1.5"
+version = "0.1.0"
 authors = ["Tau Gärtli"]
 description = "Implementation of the Unicode Line Breaking Algorithm"
 repository = "https://github.com/bash/unicode-linebreak-chunked"
