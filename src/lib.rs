@@ -4,21 +4,69 @@
 //! This is quite an advanced use case: **You probably want to use [`unicode-linebreak`] instead.**
 //!
 //! Implementation of the Line Breaking Algorithm described in [Unicode Standard Annex #14][UAX14].
-//!
 //! Given an input text, locates "line break opportunities", or positions appropriate for wrapping
 //! lines when displaying text.
 //!
-//! # Example
-//!
+//! # Examples
+//! ## Breaks
 //! ```
 //! use unicode_linebreak_chunked::{Linebreaks, BreakOpportunity::{Mandatory, Allowed}};
 //!
 //! let mut l = Linebreaks::default();
-//! assert!(l.chunk("a ").eq([]));
-//! assert!(l.chunk("b ").eq([(0, Allowed)]));     // May break after first space
-//! assert!(l.chunk("\nc").eq([(1, Mandatory)]));  // Must break after line feed
-//! assert!(l.chunk("d e").eq([(2, Allowed)]));    // May break after space, no break between chunks
-//! assert_eq!(l.eot(), Some(Mandatory));          // Must break at end of text, so that there always is at least one LB
+//! assert_eq!(l.chunk("a ", 0), None);
+//!
+//! // May break after first space
+//! assert_eq!(l.chunk("b ", 0), Some((0, 1, Allowed)));
+//! assert_eq!(l.chunk("b ", 1), None);
+//!
+//! // Must break after line feed
+//! assert_eq!(l.chunk("\nc", 0), Some((1, 2, Mandatory)));
+//! assert_eq!(l.chunk("\nc", 2), None);
+//!
+//! // May break after space, no break between chunks
+//! assert_eq!(l.chunk("d e", 0), Some((2, 3, Allowed)));
+//! assert_eq!(l.chunk("d e", 3), None);
+//!
+//! // Must break at end of text, so that there always is at least one LB
+//! assert_eq!(l.eot(), Some(Mandatory));
+//! ```
+//!
+//! ## Re-implementing [`linebreaks`]
+//!
+//! ```rust
+//! use unicode_linebreak_chunked::{Linebreaks, BreakOpportunity};
+//!
+//! fn linebreaks(s: &str) -> impl Iterator<Item = (usize, BreakOpportunity)> + Clone + '_ {
+//!     LinebreaksIter {
+//!         input: s,
+//!         start: 0,
+//!         linebreaks: Linebreaks::default(),
+//!     }
+//! }
+//!
+//! #[derive(Clone)]
+//! struct LinebreaksIter<'a> {
+//!     input: &'a str,
+//!     start: usize,
+//!     linebreaks: Linebreaks,
+//! }
+//!
+//! impl Iterator for LinebreaksIter<'_> {
+//!     type Item = (usize, BreakOpportunity);
+//!
+//!     fn next(&mut self) -> Option<Self::Item> {
+//!         match self.linebreaks.chunk(&self.input, self.start) {
+//!             Some((break_pos, new_start, opportunity)) => {
+//!                 self.start = new_start;
+//!                 Some((break_pos, opportunity))
+//!             }
+//!             None => {
+//!                 self.start = self.input.len();
+//!                 Some((self.start, self.linebreaks.eot()?))
+//!             }
+//!         }
+//!     }
+//! }
 //! ```
 //!
 //! [UAX14]: https://www.unicode.org/reports/tr14/
@@ -29,14 +77,12 @@
 #![deny(missing_docs, missing_debug_implementations)]
 
 use core::iter::once;
-use iter_utils::ExhaustOnDrop;
 
 /// The [Unicode version](https://www.unicode.org/versions/) conformed to.
 pub const UNICODE_VERSION: (u8, u8, u8) = (15, 0, 0);
 
 include!("shared.rs");
 include!("tables.rs");
-mod iter_utils;
 
 /// Returns the line break property of the specified code point.
 ///
@@ -99,23 +145,26 @@ impl Default for Linebreaks {
 }
 
 impl Linebreaks {
-    /// Get the break opportunities for the next chunk of text.
+    /// Get the next break opportunities for the next chunk of text.
     ///
-    /// Break opportunities are given as tuples of the byte index (relative to the current chunk)
-    /// of the character succeeding the break and the type.
+    /// Break opportunities are given as a tuple of:
+    /// * the byte index (relative to the current chunk) of the character succeeding the break
+    /// * the byte index of the new start position for calling [`Linebreaks::chunk`] again.
+    /// * and the break type
+    ///
+    /// This function has to be called multiple times per chunk until `None`
+    /// is returned.
     ///
     /// Note that this will not return a [`BreakOpportunity`] at the end
     /// of the provided chunk. Call [`Linebreaks::eot`] after providing all chunks to
     /// get the final [`BreakOpportunity`].
-    pub fn chunk<'a>(
-        &'a mut self,
-        s: &'a str,
-    ) -> impl Iterator<Item = (usize, BreakOpportunity)> + 'a {
-        ExhaustOnDrop(
-            s.char_indices()
-                .map(|(i, c)| (i, break_property(c as u32) as u8))
-                .filter_map(|(i, cls)| self.next(cls).map(|o| (i, o))),
-        )
+    pub fn chunk(&mut self, s: &str, start: usize) -> Option<(usize, usize, BreakOpportunity)> {
+        s[start..]
+            .char_indices()
+            .map(|(i, c)| (i, break_property(c as u32) as u8, c.len_utf8()))
+            .filter_map(|(i, cls, len)| self.next(cls).map(|o| (i, i + len, o)))
+            .map(|(i, new_start, o)| (start + i, start + new_start, o))
+            .next()
     }
 
     /// End of text. This resets the [`Linebreaks`] struct for re-use.

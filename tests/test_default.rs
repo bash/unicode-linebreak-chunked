@@ -48,7 +48,8 @@ fn test_lb_default() -> io::Result<()> {
         })
         .unzip();
 
-        let actual: Vec<_> = linebreak_indices(&string);
+        let actual_reference: Vec<_> = linebreaks(&string).map(|(i, _)| i).collect();
+        let actual: Vec<_> = linebreaks_reimplemented(&string).map(|(i, _)| i).collect();
         let expected: Vec<_> = spots
             .into_iter()
             .filter_map(|(i, is_break)| if is_break { Some(i) } else { None })
@@ -59,14 +60,44 @@ fn test_lb_default() -> io::Result<()> {
             "String: ‘{}’, comment: {}",
             string, comment
         );
+        assert_eq!(
+            actual_reference, expected,
+            "String: ‘{}’, comment: {}",
+            string, comment
+        );
     }
 
     Ok(())
 }
 
-fn linebreak_indices(s: &str) -> Vec<usize> {
-    let mut l = Linebreaks::default();
-    let mut breaks: Vec<_> = l.chunk(s).map(|(i, _)| i).collect();
-    breaks.extend(l.eot().map(|_| s.len()));
-    breaks
+fn linebreaks_reimplemented(input: &str) -> LinebreaksIter<'_> {
+    LinebreaksIter {
+        input,
+        start: 0,
+        linebreaks: Linebreaks::default(),
+    }
+}
+
+#[derive(Clone)]
+struct LinebreaksIter<'a> {
+    input: &'a str,
+    start: usize,
+    linebreaks: Linebreaks,
+}
+
+impl Iterator for LinebreaksIter<'_> {
+    type Item = (usize, BreakOpportunity);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.linebreaks.chunk(&self.input, self.start) {
+            Some((break_pos, new_start, opportunity)) => {
+                self.start = new_start;
+                Some((break_pos, opportunity))
+            }
+            None => {
+                self.start = self.input.len();
+                Some((self.start, self.linebreaks.eot()?))
+            }
+        }
+    }
 }
