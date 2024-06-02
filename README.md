@@ -16,11 +16,22 @@ lines when displaying text.
 use unicode_linebreak_chunked::{Linebreaks, BreakOpportunity::{Mandatory, Allowed}};
 
 let mut l = Linebreaks::default();
-assert!(l.chunk("a ").eq([]));
-assert!(l.chunk("b ").eq([(0, Allowed)]));     // May break after first space
-assert!(l.chunk("\nc").eq([(1, Mandatory)]));  // Must break after line feed
-assert!(l.chunk("d e").eq([(2, Allowed)]));    // May break after space, no break between chunks
-assert_eq!(l.eot(), Some(Mandatory));          // Must break at end of text, so that there always is at least one LB
+assert_eq!(l.chunk("a ", 0), None);
+
+// May break after first space
+assert_eq!(l.chunk("b ", 0), Some((0, 1, Allowed)));
+assert_eq!(l.chunk("b ", 1), None);
+
+// Must break after line feed
+assert_eq!(l.chunk("\nc", 0), Some((1, 2, Mandatory)));
+assert_eq!(l.chunk("\nc", 2), None);
+
+// May break after space, no break between chunks
+assert_eq!(l.chunk("d e", 0), Some((2, 3, Allowed)));
+assert_eq!(l.chunk("d e", 3), None);
+
+// Must break at end of text, so that there always is at least one LB
+assert_eq!(l.eot(), Some(Mandatory));
 ```
 
 ## Development
